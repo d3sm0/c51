@@ -10,7 +10,7 @@ class Agent(object):
     def __init__(self, obs_dim, acts_dim, buffer_size=int(10e6), max_steps=100000, expl_fraction=.1, final_eps=.01,
                  num_cpu=4):
         self.acts_dim = acts_dim
-
+        self.eps = 1.
         self.target = DQN(name='target', obs_dim=obs_dim, acts_dim=acts_dim)
         self.agent = DQN(name='agent', obs_dim=obs_dim, acts_dim=acts_dim)
         self.memory = ReplayBuffer(size=buffer_size)

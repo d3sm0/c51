@@ -26,10 +26,11 @@ def main():
     ob = env.reset()
     ep_rw = 0
     for t in range(MAX_STEPS):
-        env.render()
+        if ep_rw > 150:
+            env.render()
+            plotter.plot_dist(obs = [ob])
         act = agent.get_action(obs=[ob], schedule=t)
         ob1, r, done, _ = env.step(action=act)
-        plotter.plot_dist(obs=[ob1])
         agent.memory.add(step=(ob, act, r, ob1, float(done)))
         ob = ob1.copy()
         ep_rw += r
@@ -41,19 +42,10 @@ def main():
                 if t % PRINT_FREQ:
                     print('EP {}, loss {}, eps {}, rw {}'.format(t, loss, agent.eps, ep_rw))
                     from tf_utils import save, get_trainable_variables
-                    save(save_path='logs', var_list=get_trainable_variables(scope='target'))
+                    save(sess = agent.sess, save_path='logs', var_list=get_trainable_variables(scope='target'))
             if t % UPDATE_TARGET_FREQ == 0:
                 agent.update_target()
             ep_rw = 0
-
-
-
-            # set agent
-            # params:  env, learning rate, model params, time steps, buffer size, exploration, targenet newtork update batch size gamma, dist params
-            # run learning method
-            # collect results
-            # save
-
 
 if __name__ == '__main__':
     main()

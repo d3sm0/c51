@@ -51,11 +51,11 @@ def load_model(load_path, var_list=None):
         tf.logging.error(e)
 
 
-def save(save_path, var_list=None):
+def save(sess, save_path, var_list=None):
     os.makedirs(save_path, exist_ok=True)
     saver = tf.train.Saver(var_list=var_list)
     try:
-        saver.save(sess=tf.get_default_session(), save_path=os.path.join(save_path, 'model.ckpt'),
+        saver.save(sess=sess, save_path=os.path.join(save_path, 'model.ckpt'),
                    write_meta_graph=False)
     except Exception as e:
         tf.logging.error(e)
