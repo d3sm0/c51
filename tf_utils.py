@@ -42,11 +42,11 @@ def get_pa(p, acts, batch_size):
     return p_target
 
 
-def load_model(load_path, var_list=None):
+def load_model(sess, load_path, var_list=None):
     ckpt = tf.train.load_checkpoint(ckpt_dir_or_file=load_path)
     saver = tf.train.Saver(var_list=var_list)
     try:
-        saver.restore(sess=tf.get_default_session(), save_path=ckpt)
+        saver.restore(sess=sess, save_path=ckpt)
     except Exception as e:
         tf.logging.error(e)
 

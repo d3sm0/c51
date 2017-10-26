@@ -25,6 +25,9 @@ def main():
     plotter = PlotMachine(agent = agent, p_params = {'v_min':0, 'v_max':25,'n_atoms':11} , n_actions = env.action_space.n, action_set = None)
     ob = env.reset()
     ep_rw = 0
+    from tf_utils import load_model
+
+    load_model(sess = agent.sess, load_path='logs')
     for t in range(MAX_STEPS):
         if ep_rw > 150:
             env.render()
