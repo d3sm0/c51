@@ -1,54 +1,76 @@
 import gym
-from agent import Agent
 
-from utils import PlotMachine
-MAX_STEPS = 100000
-TRAIN_FREQ = 5
-UPDATE_TARGET_FREQ = 500
-BATCH_SIZE = 64
-PRINT_FREQ = 500
-BUFFER_SIZE = 50000
-# TODO:
-"""
-- add distribution plotter
-- add lstm
-- add prioritized replay memory
-- add a way to manage network config, training config 
-- add tensorboard
-"""
+from agent import Agent
+# from utils import PlotMachine
+from utils.logger import Logger
+from utils.tf_utils import set_global_seed
+
+
+def train(env_id, max_steps, topology="linear", batch_size=64, train_freq=1, update_freq=500, save_freq=5000):
+    env = gym.make("CartPole-v0")
+    #
+    agent = Agent(obs_dim=env.observation_space.shape[0], acts_dim=env.action_space.n, topology=topology,
+                  max_steps=max_steps)
+    # # plotter = PlotMachine(agent=agent, v_min=agent_config['v_min'], v_max=agent_config['v_max'],
+    #                       nb_atoms=agent_config['nb_atoms'],
+    #                       n_actions=env.action_space.n, action_set=None)
+
+    logger = Logger(log_dir='logs', var_list=agent.target._params)
+    ep, ep_rw = 0, 0
+
+    ob = env.reset()
+    try:
+        for t in range(max_steps):
+            act = agent.step(obs=[ob], schedule=t)
+            #             plotter.plot_dist(obs=[ob])
+            ob1, r, done, _ = env.step(action=act)
+            agent.memory.add(step=(ob, act, r, ob1, float(done)))
+            ob = ob1.copy()
+            ep_rw += r
+            if done:
+                env.reset()
+                ep += 1
+                ep_rw = 0
+            if t % train_freq == 0:
+                batch = agent.sample(batch_size=batch_size)
+                loss, feed_dict = agent.train(*batch)
+            if t % update_freq == 0:
+                agent.update_target()
+                summary, global_step = agent.get_train_summary(feed_dict=feed_dict)
+                ep_stats = {
+                    'loss': loss,
+                    'agent_eps': agent.eps,
+                    'ep_rw': ep_rw,
+                    'total_ep': ep,
+                    'total_steps': t
+                }
+                logger.log(ep_stats, total_ep=ep)
+                logger.dump(stats=ep_stats, tf_summary=summary, global_step=t)
+
+            if t % save_freq == 0:
+                logger.save_model(sess=agent.sess, global_step=t)
+
+    except KeyboardInterrupt:
+        logger.save_model(sess=agent.sess, global_step=t)
+        agent.close()
+        print('Closing experiment. File saved at {}'.format(logger.save_path))
 
 
 def main():
-    env = gym.make('CartPole-v0')
-    agent = Agent(obs_dim=env.observation_space.shape[0], acts_dim=env.action_space.n, max_steps=MAX_STEPS,
-                  buffer_size=BUFFER_SIZE)
-    plotter = PlotMachine(agent = agent, p_params = {'v_min':0, 'v_max':25,'n_atoms':11} , n_actions = env.action_space.n, action_set = None)
-    ob = env.reset()
-    ep_rw = 0
-    from tf_utils import load_model
+    import argparse
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--env', help='environment ID', default='BreakoutNoFrameskip-v4')
+    parser.add_argument('--seed', help='RNG seed', type=int, default=0)
+    parser.add_argument('--policy', help='Policy architecture', choices=['cnn', 'lstm', 'lnlstm', 'linear'],
+                        default='linear')
+    parser.add_argument('--lrschedule', help='Learning rate schedule', choices=['constant', 'linear'],
+                        default='constant')
+    parser.add_argument('--logdir', help='Directory for logging', default='logs')
+    parser.add_argument('--max-timesteps', type=int, default=int(10e6))
+    args = parser.parse_args()
+    set_global_seed(args.seed)
+    train(args.env, max_steps=args.max_timesteps, topology=args.policy)
 
-    load_model(sess = agent.sess, load_path='logs')
-    for t in range(MAX_STEPS):
-        if ep_rw > 150:
-            env.render()
-            plotter.plot_dist(obs = [ob])
-        act = agent.get_action(obs=[ob], schedule=t)
-        ob1, r, done, _ = env.step(action=act)
-        agent.memory.add(step=(ob, act, r, ob1, float(done)))
-        ob = ob1.copy()
-        ep_rw += r
-        if done:
-            ob = env.reset()
-            if t % TRAIN_FREQ == 0:
-                batch = agent.memory.sample(batch_size=BATCH_SIZE)
-                loss = agent.train(*batch)
-                if t % PRINT_FREQ:
-                    print('EP {}, loss {}, eps {}, rw {}'.format(t, loss, agent.eps, ep_rw))
-                    from tf_utils import save, get_trainable_variables
-                    save(sess = agent.sess, save_path='logs', var_list=get_trainable_variables(scope='target'))
-            if t % UPDATE_TARGET_FREQ == 0:
-                agent.update_target()
-            ep_rw = 0
 
 if __name__ == '__main__':
     main()

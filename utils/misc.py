@@ -10,8 +10,9 @@ class LinearSchedule(object):
 
 
 import numpy as np
-import matplotlib.pyplot as plt
-from tf_utils import build_z
+
+# import matplotlib.pyplot as plt
+from utils.tf_utils import build_z
 
 
 class PlotMachine(object):

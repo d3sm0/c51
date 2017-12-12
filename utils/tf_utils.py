@@ -1,7 +1,9 @@
-import tensorflow as tf
 import os
-import numpy as np
 
+import numpy as np
+import tensorflow as tf
+
+tf.logging.set_verbosity(tf.logging.INFO)
 
 def build_z(v_min, v_max, n_atoms):
     dz = (v_max - v_min) / (n_atoms - 1)
@@ -32,7 +34,7 @@ def transfer_learning(to_tensors, from_tensors, tau=1.):
             # C <- C * tau + C_old * (1-tau)
             tf.assign(to_t, tf.multiply(from_t, tau) + tf.multiply(to_t, 1. - tau))
         )
-    return update_op #tf.group(*update_op)
+    return update_op  # tf.group(*update_op)
 
 
 def get_pa(p, acts, batch_size):
@@ -61,6 +63,18 @@ def save(sess, save_path, var_list=None):
         tf.logging.error(e)
 
 
+def create_saver(var_list):
+    return tf.train.Saver(var_list=var_list, save_relative_paths=True, reshape=True)
+
+
+def create_writer(path, suffix):
+    return tf.summary.FileWriter(logdir=path, flush_secs=360, filename_suffix=suffix)
+
+
+def create_summary():
+    return tf.summary.Summary()
+
+
 def fc(x, h_size, name, act=None, std=0.1):
     with tf.variable_scope(name):
         input_size = x.get_shape()[1]
@@ -72,3 +86,30 @@ def fc(x, h_size, name, act=None, std=0.1):
         return z
 
 
+def init_graph(sess):
+    sess.run(tf.global_variables_initializer())
+    tf.logging.info('Graph initialized')
+
+
+def make_config(num_cpu, memory_fraction=.25):
+    tf_config = tf.ConfigProto(
+        inter_op_parallelism_threads=num_cpu,
+        intra_op_parallelism_threads=num_cpu,
+        log_device_placement=False
+    )
+    tf_config.gpu_options.allow_growth = True
+    return tf_config
+
+
+def make_session(num_cpu=1):
+    return tf.Session(config=make_config(num_cpu=num_cpu))
+
+# def make_session(num_cpu, memory_fraction=.25):
+#     tf_config = tf.ConfigProto(
+#         inter_op_parallelism_threads=num_cpu,
+#         intra_op_parallelism_threads=num_cpu,
+#         log_device_placement = False
+#     )
+#     tf_config.gpu_options.allow_growth = True
+#     # tf_config.gpu_options.per_rpocess_gpu_memory_fraction = memory_fraction
+#     return tf.Session(config=tf_config)

@@ -1,5 +1,7 @@
-import numpy as np
 import random
+
+import numpy as np
+
 
 # TODO replace with code from dyn walk and use prioritized memory
 class ReplayBuffer(object):
@@ -15,7 +17,7 @@ class ReplayBuffer(object):
             self._storage[self._next_idx] = step
         self._next_idx = (self._next_idx + 1) % self._maxsize
 
-    def _prepare_data(self, idxs):
+    def _encode_sample(self, idxs):
         obs, acts, rws, obs1, dones = [], [], [], [], []
         for i in idxs:
             step = self._storage[i]
@@ -29,4 +31,4 @@ class ReplayBuffer(object):
 
     def sample(self, batch_size):
         idxs = [random.randint(0, len(self._storage) - 1) for _ in range(batch_size)]
-        return self._prepare_data(idxs=idxs)
+        return self._encode_sample(idxs=idxs)

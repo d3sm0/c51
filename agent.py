@@ -1,38 +1,50 @@
 import numpy as np
-from models import DQN
-import tensorflow as tf
-from tf_utils import transfer_learning, get_trainable_variables
-from utils import LinearSchedule
+
 from memory import ReplayBuffer
+from models import DQN
+from utils.misc import LinearSchedule
+from utils.tf_utils import transfer_learning, get_trainable_variables, make_session, init_graph
 
 
 class Agent(object):
     def __init__(self, obs_dim, acts_dim, buffer_size=int(10e6), max_steps=100000, expl_fraction=.1, final_eps=.01,
-                 num_cpu=4):
+                 num_cpu=4, topology="linear"):
         self.acts_dim = acts_dim
         self.eps = 1.
-        self.target = DQN(name='target', obs_dim=obs_dim, acts_dim=acts_dim)
-        self.agent = DQN(name='agent', obs_dim=obs_dim, acts_dim=acts_dim)
+        self.target = DQN(name='target', obs_dim=obs_dim, acts_dim=acts_dim, topology=topology)
+        self.agent = DQN(name='agent', obs_dim=obs_dim, acts_dim=acts_dim, topology=topology)
         self.memory = ReplayBuffer(size=buffer_size)
         self.scheduler = LinearSchedule(init_value=1., final_value=final_eps, max_steps=(max_steps * expl_fraction))
         self.__sync_op = transfer_learning(to_tensors=get_trainable_variables(scope='target'),
                                            from_tensors=get_trainable_variables('agent'))
-        self.sess = self.__make_session(num_cpu=num_cpu)
-        self.sess.run(tf.global_variables_initializer())
+        self.sess = make_session(num_cpu=num_cpu)
+        self._reset_graph()
         self.update_target()
+
+    def get_train_summary(self, feed_dict):
+
+        return self.sess.run([self.agent._summary_op, self.agent._global_step], feed_dict=feed_dict)
+
+    def _reset_graph(self):
+        init_graph(sess=self.sess)
 
     def update_target(self):
         self.sess.run(self.__sync_op)
 
-    def get_action(self, obs, schedule):
+    def step(self, obs, schedule):
         self.eps = self.scheduler.value(t=schedule)
         if self.eps < np.random.random():
             act = self.sess.run(self.agent.next_action, feed_dict={self.agent.obs: obs})[0]
         else:
             act = np.random.randint(low=0, high=self.acts_dim)
         return act
+
     def get_p(self, obs):
-        return self.sess.run(self.agent.p, feed_dict={self.agent.obs:obs})[0]
+        return self.sess.run(self.agent.p, feed_dict={self.agent.obs: obs})[0]
+
+    def sample(self, batch_size):
+        return self.memory.sample(batch_size=batch_size)
+
     def train(self, obs, acts, rws, obs1, dones):
         # =============
         # TODO this should be done inside the TF graph....
@@ -41,17 +53,14 @@ class Agent(object):
                              feed_dict={self.target.obs: obs1, self.target.rws: rws, self.target.dones: dones})[0]
         loss, _ = self.sess.run([self.agent.cross_entropy, self.agent.train_op],
                                 feed_dict={self.agent.obs: obs, self.agent.acts: acts, self.agent.thtz: thtz})
-        return loss
 
-    def __make_session(self, num_cpu, memory_fraction=.25):
-        tf_config = tf.ConfigProto(
-            inter_op_parallelism_threads=num_cpu,
-            intra_op_parallelism_threads=num_cpu,
-            log_device_placement = False
-        )
-        tf_config.gpu_options.allow_growth = True
-        # tf_config.gpu_options.per_rpocess_gpu_memory_fraction = memory_fraction
-        return tf.Session(config=tf_config)
+        feed_dict = {
+            self.agent.obs: obs,
+            self.agent.acts: acts,
+            self.agent.thtz: thtz,
+            self.agent.rws: rws
+        }
+        return loss, feed_dict
 
     def close(self):
         self.sess.close()
