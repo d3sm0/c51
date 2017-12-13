@@ -7,7 +7,7 @@ from utils.tf_utils import transfer_learning, get_trainable_variables, make_sess
 
 
 class Agent(object):
-    def __init__(self, obs_dim, acts_dim, buffer_size=int(10e6), max_steps=100000, expl_fraction=.1, final_eps=.01,
+    def __init__(self, obs_dim, acts_dim, buffer_size=int(1e4), max_steps=100000, expl_fraction=.1, final_eps=.001,
                  num_cpu=4, topology="linear"):
         self.acts_dim = acts_dim
         self.eps = 1.

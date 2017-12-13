@@ -6,10 +6,11 @@ from utils.logger import Logger
 from utils.tf_utils import set_global_seed
 
 
-def train(env_id, max_steps, topology="linear", batch_size=64, train_freq=1, update_freq=500, save_freq=5000):
-    env = gym.make("CartPole-v0")
+def train(env_id, max_steps, topology="linear", batch_size=32, train_freq=4, update_freq=1000, save_freq=5000,
+          warmup_steps=0):
+    env = gym.make(env_id)
     #
-    agent = Agent(obs_dim=env.observation_space.shape[0], acts_dim=env.action_space.n, topology=topology,
+    agent = Agent(obs_dim=env.observation_space.shape, acts_dim=env.action_space.n, topology=topology,
                   max_steps=max_steps)
     # # plotter = PlotMachine(agent=agent, v_min=agent_config['v_min'], v_max=agent_config['v_max'],
     #                       nb_atoms=agent_config['nb_atoms'],
@@ -31,10 +32,10 @@ def train(env_id, max_steps, topology="linear", batch_size=64, train_freq=1, upd
                 env.reset()
                 ep += 1
                 ep_rw = 0
-            if t % train_freq == 0:
+            if t > warmup_steps and t % train_freq == 0:
                 batch = agent.sample(batch_size=batch_size)
                 loss, feed_dict = agent.train(*batch)
-            if t % update_freq == 0:
+            if t > warmup_steps and t % update_freq == 0:
                 agent.update_target()
                 summary, global_step = agent.get_train_summary(feed_dict=feed_dict)
                 ep_stats = {
@@ -62,7 +63,7 @@ def main():
     parser.add_argument('--env', help='environment ID', default='BreakoutNoFrameskip-v4')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     parser.add_argument('--policy', help='Policy architecture', choices=['cnn', 'lstm', 'lnlstm', 'linear'],
-                        default='linear')
+                        default='cnn')
     parser.add_argument('--lrschedule', help='Learning rate schedule', choices=['constant', 'linear'],
                         default='constant')
     parser.add_argument('--logdir', help='Directory for logging', default='logs')

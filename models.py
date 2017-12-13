@@ -4,8 +4,8 @@ from utils.tf_utils import fc, p_to_q, build_z, get_trainable_variables, get_pa
 
 
 class DQN(object):
-    def __init__(self, name, obs_dim, acts_dim, topology="cnn", gamma=.95, v_min=-20., v_max=20., n_atoms=51, clip=40.,
-                 lr=1e-3):
+    def __init__(self, name, obs_dim, acts_dim, topology="cnn", gamma=.99, v_min=-10., v_max=10., n_atoms=51, clip=40.,
+                 lr=1e-4):
         self.scope = name
         self._global_step = tf.train.get_or_create_global_step()
         self.__init_ph(obs_dim=obs_dim, acts_dim=acts_dim, n_atoms=n_atoms)
@@ -29,7 +29,7 @@ class DQN(object):
         self.train_op = opt.apply_gradients(zip(grads, self._params))
 
     def __init_ph(self, obs_dim, acts_dim, n_atoms):
-        self.obs = tf.placeholder(dtype=tf.float32, shape=[None, obs_dim], name='obs')
+        self.obs = tf.placeholder(dtype=tf.float32, shape=[None] + list(obs_dim), name='obs')
         self.acts = tf.placeholder(dtype=tf.int32, shape=[None], name='acts')
         self.rws = tf.placeholder(dtype=tf.float32, shape=[None], name='rws')
         self.dones = tf.placeholder(dtype=tf.float32, shape=[None], name='dones')

@@ -10,7 +10,7 @@ class Logger(object):
         unique_name = datetime.now().strftime('%H-%M-%S')
         self.log_path = os.path.join(os.getcwd(), log_dir, unique_name, 'stats')
         self.save_path = os.path.join(os.getcwd(), log_dir, unique_name, 'model')
-        self.tf_writer = create_writer(path=log_dir, suffix=unique_name)
+        self.tf_writer = create_writer(path=self.log_path, suffix=unique_name)
         self.tf_saver = create_saver(var_list)
         self.ep_summary = create_summary()
         os.makedirs(self.log_path, exist_ok=True)
