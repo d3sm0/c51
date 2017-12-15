@@ -7,12 +7,13 @@ from utils.tf_utils import transfer_learning, get_trainable_variables, make_sess
 
 
 class Agent(object):
-    def __init__(self, obs_dim, acts_dim, buffer_size=int(1e4), max_steps=100000, expl_fraction=.1, final_eps=.001,
+    def __init__(self, obs_dim, acts_dim, buffer_size=int(1e5), max_steps=100000, expl_fraction=.1, final_eps=.001,
                  num_cpu=4, topology="linear"):
         self.acts_dim = acts_dim
         self.eps = 1.
         self.target = DQN(name='target', obs_dim=obs_dim, acts_dim=acts_dim, topology=topology)
-        self.agent = DQN(name='agent', obs_dim=obs_dim, acts_dim=acts_dim, topology=topology)
+        self.agent = DQN(name='agent', obs_dim=obs_dim, acts_dim=acts_dim, topology=topology,
+                         target_thtz=self.target.ThTz)
         self.memory = ReplayBuffer(size=buffer_size)
         self.scheduler = LinearSchedule(init_value=1., final_value=final_eps, max_steps=(max_steps * expl_fraction))
         self.__sync_op = transfer_learning(to_tensors=get_trainable_variables(scope='target'),
@@ -46,20 +47,17 @@ class Agent(object):
         return self.memory.sample(batch_size=batch_size)
 
     def train(self, obs, acts, rws, obs1, dones):
-        # =============
-        # TODO this should be done inside the TF graph....
-        # =============
-        thtz = self.sess.run([self.target.ThTz],
-                             feed_dict={self.target.obs: obs1, self.target.rws: rws, self.target.dones: dones})[0]
-        loss, _ = self.sess.run([self.agent.cross_entropy, self.agent.train_op],
-                                feed_dict={self.agent.obs: obs, self.agent.acts: acts, self.agent.thtz: thtz})
+
+        # thtz = self.sess.run([self.target.ThTz],
+        #                      feed_dict={self.target.obs: obs1, self.target.rws: rws, self.target.dones: dones})[0]
 
         feed_dict = {
-            self.agent.obs: obs,
-            self.agent.acts: acts,
-            self.agent.thtz: thtz,
-            self.agent.rws: rws
+            self.target.obs: obs1, self.target.rws: rws, self.target.dones: dones, self.agent.obs: obs,
+            self.agent.acts: acts, self.agent.rws: rws
         }
+        loss, _ = self.sess.run([self.agent.cross_entropy, self.agent.train_op],
+                                feed_dict=feed_dict)
+
         return loss, feed_dict
 
     def close(self):

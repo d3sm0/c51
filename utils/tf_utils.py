@@ -5,6 +5,7 @@ import tensorflow as tf
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
+
 def build_z(v_min, v_max, n_atoms):
     dz = (v_max - v_min) / (n_atoms - 1)
     z = tf.range(v_min, v_max + dz / 2, dz, dtype=tf.float32, name='z')
@@ -75,15 +76,13 @@ def create_summary():
     return tf.summary.Summary()
 
 
-def fc(x, h_size, name, act=None, std=0.1):
+def fc(x, h_size, name, act=tf.nn.relu, std=0.1):
     with tf.variable_scope(name):
         input_size = x.get_shape()[1]
         w = tf.get_variable('w', (input_size, h_size), initializer=tf.random_normal_initializer(stddev=std))
         b = tf.get_variable('b', (h_size), initializer=tf.constant_initializer(0.0))
         z = tf.matmul(x, w) + b
-        if act is not None:
-            z = act(z)
-        return z
+        return act(z)
 
 
 def init_graph(sess):
@@ -104,6 +103,7 @@ def make_config(num_cpu, memory_fraction=.25):
 def make_session(num_cpu=1):
     return tf.Session(config=make_config(num_cpu=num_cpu))
 
+
 # def make_session(num_cpu, memory_fraction=.25):
 #     tf_config = tf.ConfigProto(
 #         inter_op_parallelism_threads=num_cpu,
@@ -113,3 +113,28 @@ def make_session(num_cpu=1):
 #     tf_config.gpu_options.allow_growth = True
 #     # tf_config.gpu_options.per_rpocess_gpu_memory_fraction = memory_fraction
 #     return tf.Session(config=tf_config)
+def fc_noisy(x, h_size, name, reuse=False, act=lambda x: x):
+    d = x.get_shape().as_list()[1]
+
+    mu_0 = tf.random_uniform_initializer(minval=-1 / np.power(d, .5), maxval=1 / np.power(d, .5))
+    sigma_0 = tf.constant_initializer(.4 / np.power(d, .5))
+
+    p = tf.random_normal([d, 1])
+    q = tf.random_normal([1, h_size])
+    f_p = tf.multiply(tf.sign(p), tf.pow(tf.abs(p), .5))
+    f_q = tf.multiply(tf.sign(q), tf.pow(tf.abs(q), .5))
+
+    w_eps = tf.multiply(f_p, f_q)
+    b_eps = tf.squeeze(f_q)
+
+    with tf.variable_scope(name, reuse=reuse):
+        w_mu = tf.get_variable('w_mu', shape=[d, h_size], initializer=mu_0)
+        w_sigma = tf.get_variable('w_sigma', shape=[d, h_size], initializer=sigma_0)
+        w = w_mu + tf.multiply(w_sigma, w_eps)
+
+        b_mu = tf.get_variable('b_mu', shape=[h_size], initializer=mu_0)
+        b_sigma = tf.get_variable('b_sigma', shape=[h_size], initializer=sigma_0)
+        b = b_mu + tf.multiply(b_sigma, b_eps)
+        z = tf.matmul(x, w) + b
+
+    return act(z)

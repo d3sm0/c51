@@ -1,3 +1,5 @@
+from time import time
+
 import gym
 
 from agent import Agent
@@ -7,8 +9,8 @@ from utils.tf_utils import set_global_seed
 
 
 def train(env_id, max_steps, topology="linear", batch_size=32, train_freq=4, update_freq=1000, save_freq=5000,
-          warmup_steps=0):
-    env = gym.make(env_id)
+          print_freq=100, warmup_steps=1000):
+    env = gym.make("CartPole-v0")
     #
     agent = Agent(obs_dim=env.observation_space.shape, acts_dim=env.action_space.n, topology=topology,
                   max_steps=max_steps)
@@ -20,6 +22,8 @@ def train(env_id, max_steps, topology="linear", batch_size=32, train_freq=4, upd
     ep, ep_rw = 0, 0
 
     ob = env.reset()
+    start = time()
+
     try:
         for t in range(max_steps):
             act = agent.step(obs=[ob], schedule=t)
@@ -35,18 +39,20 @@ def train(env_id, max_steps, topology="linear", batch_size=32, train_freq=4, upd
             if t > warmup_steps and t % train_freq == 0:
                 batch = agent.sample(batch_size=batch_size)
                 loss, feed_dict = agent.train(*batch)
-            if t > warmup_steps and t % update_freq == 0:
-                agent.update_target()
                 summary, global_step = agent.get_train_summary(feed_dict=feed_dict)
+            if t > warmup_steps and t % print_freq == 0:
                 ep_stats = {
                     'loss': loss,
                     'agent_eps': agent.eps,
                     'ep_rw': ep_rw,
                     'total_ep': ep,
-                    'total_steps': t
+                    'total_steps': t,
+                    'fps': int(t / (time() - start))
                 }
                 logger.log(ep_stats, total_ep=ep)
                 logger.dump(stats=ep_stats, tf_summary=summary, global_step=t)
+            if t > warmup_steps and t % update_freq == 0:
+                agent.update_target()
 
             if t % save_freq == 0:
                 logger.save_model(sess=agent.sess, global_step=t)
@@ -60,10 +66,10 @@ def train(env_id, max_steps, topology="linear", batch_size=32, train_freq=4, upd
 def main():
     import argparse
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--env', help='environment ID', default='BreakoutNoFrameskip-v4')
+    parser.add_argument('--env', help='environment ID', default='CartPole-v0')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
-    parser.add_argument('--policy', help='Policy architecture', choices=['cnn', 'lstm', 'lnlstm', 'linear'],
-                        default='cnn')
+    parser.add_argument('--policy', help='Policy architecture', choices=['cnn', 'linear'],
+                        default='linear')
     parser.add_argument('--lrschedule', help='Learning rate schedule', choices=['constant', 'linear'],
                         default='constant')
     parser.add_argument('--logdir', help='Directory for logging', default='logs')

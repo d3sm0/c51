@@ -4,3 +4,6 @@
 
 `pip install -r requirements.txt`
 `python main.py --env-id CartPole-v0 --policy linear`
+
+## Todo:
+- Make it work with atari...uffa

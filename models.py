@@ -1,39 +1,42 @@
 import tensorflow as tf
 
-from utils.tf_utils import fc, p_to_q, build_z, get_trainable_variables, get_pa
+from utils.tf_utils import fc, p_to_q, build_z, get_trainable_variables, get_pa, fc_noisy
 
 
+# params for atari:.99, -10, 10, 51
 class DQN(object):
-    def __init__(self, name, obs_dim, acts_dim, topology="cnn", gamma=.99, v_min=-10., v_max=10., n_atoms=51, clip=40.,
-                 lr=1e-4):
+    def __init__(self, name, obs_dim, acts_dim, topology="linear", gamma=.95, v_min=0., v_max=10., n_atoms=11, clip=40.,
+                 lr=1e-4, target_thtz=None):
         self.scope = name
         self._global_step = tf.train.get_or_create_global_step()
-        self.__init_ph(obs_dim=obs_dim, acts_dim=acts_dim, n_atoms=n_atoms)
+        self.__init_ph(obs_dim=obs_dim, n_atoms=n_atoms)
         self.__build_graph(acts_dim=acts_dim, n_atoms=n_atoms, topology=topology)
         self.__predict_op(v_min=v_min, v_max=v_max, n_atoms=n_atoms)
-        self.__train_op(lr=lr, max_clip=clip)
-        self._summary_op = summary_op([
-            self.obs, self.acts, self.rws, self.thtz, self.cross_entropy, self.q_values
-        ])
+        self._params = get_trainable_variables(scope=self.scope)
         if self.scope == 'target':
             self.__build_categorical(v_min, v_max, n_atoms, gamma)
+        else:
+            self.thtz = target_thtz
+            self.__train_op(lr=lr, max_clip=clip)
+            self._summary_op = summary_op([
+                self.obs, self.acts, self.rws, self.q_values, self.thtz, self.cross_entropy,
+            ])
 
     def __train_op(self, lr=1e-3, max_clip=40.):
         p_target = get_pa(p=self.p, acts=self.acts, batch_size=tf.shape(self.acts)[0])
         self.cross_entropy = tf.reduce_mean(tf.reduce_sum(-self.thtz * tf.log(p_target + 1e-5), axis=-1),
                                             name='empirical_cross_entropy')
         opt = tf.train.AdamOptimizer(learning_rate=lr)
-        self._params = get_trainable_variables(scope=self.scope)
         grads = tf.gradients(self.cross_entropy, self._params)
         grads, _ = tf.clip_by_global_norm(t_list=grads, clip_norm=max_clip)
         self.train_op = opt.apply_gradients(zip(grads, self._params))
 
-    def __init_ph(self, obs_dim, acts_dim, n_atoms):
+    def __init_ph(self, obs_dim, n_atoms):
         self.obs = tf.placeholder(dtype=tf.float32, shape=[None] + list(obs_dim), name='obs')
         self.acts = tf.placeholder(dtype=tf.int32, shape=[None], name='acts')
         self.rws = tf.placeholder(dtype=tf.float32, shape=[None], name='rws')
         self.dones = tf.placeholder(dtype=tf.float32, shape=[None], name='dones')
-        self.thtz = tf.placeholder(dtype=tf.float32, shape=[None, n_atoms], name='T_pi')
+        # self.thtz = tf.placeholder(dtype=tf.float32, shape=[None, n_atoms], name='T_pi')
 
     def __predict_op(self, v_min, v_max, n_atoms):
         self.q_values = p_to_q(self.p, v_min, v_max, n_atoms)
@@ -50,15 +53,20 @@ class DQN(object):
             elif topology == "cnn":
                 cnn_config = [(32, 8, 4), (64, 4, 2), (64, 3, 1)]
                 h_size = 256
+                h = tf.cast(h, tf.float32) / 255.0
                 for idx, (kernel_size, output_dim, stride) in enumerate(cnn_config):
                     h = tf.layers.conv2d(inputs=h, filters=output_dim, kernel_size=kernel_size, strides=stride,
                                          activation=act, name="conv_{}".format(idx), padding="SAME")
                 h = tf.layers.flatten(h)
-                h = fc(x=h, h_size=h_size, act=act, name="fc")
+                h = fc(x=h, h_size=h_size, act=act, name="h_4")
+            elif topology == "noisy":
+                units = (64, 64)
+                for idx, h_size in enumerate(units):
+                    h = fc_noisy(x=h, h_size=h_size, act=act, name='h_{}'.format(idx))
             else:
                 raise NotImplementedError()
             with tf.variable_scope('p_dist'):
-                logits = fc(x=h, h_size=acts_dim * n_atoms, act=None, name='logits')
+                logits = fc(x=h, h_size=acts_dim * n_atoms, act=lambda x: x, name='logits')
                 logits = tf.reshape(logits, shape=(-1, acts_dim, n_atoms))
                 self.p = tf.nn.softmax(logits, dim=-1)
 
